@@ -7,18 +7,15 @@ migrate-up:
 	migrate -path $(MIGRATIONS_DIR) -database $(DATABASE_URL) -verbose up
 
 migrate-down:
-	migrate -path $(MIGRATIONS_DIR) -database $(DATABASE_URL) -verbose down 1
+	migrate -path $(MIGRATIONS_DIR) -database $(DATABASE_URL) -verbose down $(n)
+
+migrate-down-to:
+	migrate -path $(MIGRATIONS_DIR) -database $(DATABASE_URL) -verbose goto $(version)
 
 migrate-force:
 	migrate -path $(MIGRATIONS_DIR) -database $(DATABASE_URL) -verbose force $(version)
 
-migrate-version:
+migrate-status:
 	migrate -path $(MIGRATIONS_DIR) -database $(DATABASE_URL) -verbose version
 
-migrate-fix:
-	migrate -path $(MIGRATIONS_DIR) -database $(DATABASE_URL) -verbose fix
-
-migrate-status:
-	migrate -path $(MIGRATIONS_DIR) -database $(DATABASE_URL) -verbose status
-
-.PHONY: migrate-create migrate-up migrate-down
+.PHONY: migrate-create migrate-up migrate-down migrate-down-to migrate-force migrate-status
