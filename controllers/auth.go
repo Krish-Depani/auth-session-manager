@@ -36,7 +36,6 @@ func NewAuthController(db *gorm.DB, redis *database.RedisClient) *AuthController
 	}
 }
 
-// sendResponse is a helper function to send consistent JSON responses
 func (ac *AuthController) sendResponse(c *gin.Context, status int, message string, data interface{}, err interface{}) {
 	c.JSON(status, AuthResponse{
 		Status:  status,
@@ -46,14 +45,12 @@ func (ac *AuthController) sendResponse(c *gin.Context, status int, message strin
 	})
 }
 
-// Register handles user registration
 func (ac *AuthController) Register(c *gin.Context) {
 	req, ok := validators.ValidateRegisterRequest(c)
 	if !ok {
 		return
 	}
 
-	// Start database transaction
 	tx := ac.db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -61,7 +58,6 @@ func (ac *AuthController) Register(c *gin.Context) {
 		}
 	}()
 
-	// Check if user exists
 	var existingUser models.User
 	if err := tx.Where("email = ? OR username = ?", req.Email, req.Username).First(&existingUser).Error; err == nil {
 		tx.Rollback()
@@ -76,7 +72,6 @@ func (ac *AuthController) Register(c *gin.Context) {
 		return
 	}
 
-	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		tx.Rollback()
@@ -84,7 +79,6 @@ func (ac *AuthController) Register(c *gin.Context) {
 		return
 	}
 
-	// Create user
 	user := models.User{
 		Email:        strings.ToLower(req.Email),
 		Username:     req.Username,
@@ -99,7 +93,6 @@ func (ac *AuthController) Register(c *gin.Context) {
 		return
 	}
 
-	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		ac.sendResponse(c, http.StatusInternalServerError, "Registration failed", nil, "Failed to commit transaction")
 		return
@@ -112,14 +105,12 @@ func (ac *AuthController) Register(c *gin.Context) {
 	}, nil)
 }
 
-// Login handles user authentication
 func (ac *AuthController) Login(c *gin.Context) {
 	req, ok := validators.ValidateLoginRequest(c)
 	if !ok {
 		return
 	}
 
-	// Start transaction
 	tx := ac.db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -141,7 +132,6 @@ func (ac *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	// Check for too many failed attempts
 	if user.FailedLoginAttempts >= 5 && user.LastFailedAttempt != nil {
 		cooldownPeriod := time.Now().Add(-15 * time.Minute)
 		if user.LastFailedAttempt.After(cooldownPeriod) {
@@ -152,11 +142,9 @@ func (ac *AuthController) Login(c *gin.Context) {
 			})
 			return
 		}
-		// Reset counter after cooldown
 		user.FailedLoginAttempts = 0
 	}
 
-	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		now := time.Now()
 		if err := tx.Model(&user).Updates(map[string]interface{}{
@@ -175,20 +163,18 @@ func (ac *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	// Generate session
 	sessionToken := uuid.New().String()
 	expiresAt := time.Now().Add(24 * time.Hour)
 
 	location := utils.GetIPLocation(c.ClientIP())
 
-	// Create session in database
 	session := models.UserSession{
 		UserID:       user.ID,
 		SessionToken: sessionToken,
 		DeviceInfo:   c.GetHeader("User-Agent"),
 		IPAddress:    c.ClientIP(),
 		UserAgent:    c.GetHeader("User-Agent"),
-		Location:     location, // Implement geolocation if needed
+		Location:     location,
 		LastActivity: time.Now(),
 		ExpiresAt:    expiresAt,
 		IsActive:     true,
@@ -200,7 +186,6 @@ func (ac *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	// Update user's last login
 	now := time.Now()
 	if err := tx.Model(&user).Updates(map[string]interface{}{
 		"last_login":            now,
@@ -212,7 +197,6 @@ func (ac *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	// Store session in Redis
 	err := ac.redis.SetSession(context.Background(), sessionToken, user.ID, 24*time.Hour)
 	if err != nil {
 		tx.Rollback()
@@ -220,13 +204,11 @@ func (ac *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		ac.sendResponse(c, http.StatusInternalServerError, "Login failed", nil, "Failed to commit transaction")
 		return
 	}
 
-	// Set cookie
 	c.SetCookie("session_token", sessionToken, int(24*time.Hour.Seconds()), "/", "", false, true)
 
 	ac.sendResponse(c, http.StatusOK, "Login successful", map[string]interface{}{
@@ -235,14 +217,9 @@ func (ac *AuthController) Login(c *gin.Context) {
 			"email":    user.Email,
 			"username": user.Username,
 		},
-		// "session": map[string]interface{}{
-		// 	"token":     sessionToken,
-		// 	"expiresAt": expiresAt,
-		// },
 	}, nil)
 }
 
-// Logout handles user logout
 func (ac *AuthController) Logout(c *gin.Context) {
 	sessionToken, err := c.Cookie("session_token")
 	if err != nil {
@@ -250,7 +227,6 @@ func (ac *AuthController) Logout(c *gin.Context) {
 		return
 	}
 
-	// Start transaction
 	tx := ac.db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -258,7 +234,6 @@ func (ac *AuthController) Logout(c *gin.Context) {
 		}
 	}()
 
-	// Deactivate session in database
 	result := tx.Model(&models.UserSession{}).
 		Where("session_token = ? AND is_active = ?", sessionToken, true).
 		Updates(map[string]interface{}{
@@ -278,26 +253,22 @@ func (ac *AuthController) Logout(c *gin.Context) {
 		return
 	}
 
-	// Remove session from Redis
 	if err := ac.redis.DeleteSession(context.Background(), sessionToken); err != nil {
 		tx.Rollback()
 		ac.sendResponse(c, http.StatusInternalServerError, "Logout failed", nil, "Failed to delete session")
 		return
 	}
 
-	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		ac.sendResponse(c, http.StatusInternalServerError, "Logout failed", nil, "Failed to commit transaction")
 		return
 	}
 
-	// Clear cookie
 	c.SetCookie("session_token", "", -1, "/", "", false, true)
 
 	ac.sendResponse(c, http.StatusOK, "Logged out successfully", nil, nil)
 }
 
-// AuthMiddleware handles authentication for protected routes
 func (ac *AuthController) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionToken, err := c.Cookie("session_token")
@@ -310,7 +281,6 @@ func (ac *AuthController) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// First check Redis for quick validation
 		userID, err := ac.redis.GetSession(c.Request.Context(), sessionToken)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, AuthResponse{
@@ -321,7 +291,6 @@ func (ac *AuthController) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Verify session in database and update last activity
 		var session models.UserSession
 		if err := ac.db.Where("session_token = ? AND is_active = ? AND expires_at > ?",
 			sessionToken, true, time.Now()).First(&session).Error; err != nil {
@@ -335,38 +304,11 @@ func (ac *AuthController) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Update last activity
 		ac.db.Model(&session).Update("last_activity", time.Now())
 
-		// Set user context
 		c.Set("userID", userID)
 		c.Set("sessionID", session.ID)
 
 		c.Next()
 	}
-}
-
-// GetCurrentUser retrieves the current authenticated user
-func (ac *AuthController) GetCurrentUser(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		ac.sendResponse(c, http.StatusUnauthorized, "Authentication required", nil, "No user found in context")
-		return
-	}
-
-	var user models.User
-	if err := ac.db.Select("id, email, username, full_name, created_at, last_login").
-		First(&user, userID).Error; err != nil {
-		ac.sendResponse(c, http.StatusInternalServerError, "Failed to retrieve user", nil, "Database error")
-		return
-	}
-
-	ac.sendResponse(c, http.StatusOK, "User retrieved successfully", map[string]interface{}{
-		"id":         user.ID,
-		"email":      user.Email,
-		"username":   user.Username,
-		"full_name":  user.FullName,
-		"created_at": user.CreatedAt,
-		"last_login": user.LastLogin,
-	}, nil)
 }

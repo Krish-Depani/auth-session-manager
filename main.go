@@ -28,9 +28,10 @@ func main() {
 	}
 
 	authController := controllers.NewAuthController(pgClient, redisClient)
+	userController := controllers.NewUserController(pgClient)
 
 	r := gin.Default()
-	routes.SetupRoutes(r, authController)
+	routes.SetupRoutes(r, authController, userController)
 
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": "Hello, World!"})
