@@ -1,5 +1,12 @@
 include .env
 
+start-dev:
+	go run main.go
+
+start-prod:
+	go build -o bin/main main.go
+	GIN_MODE=release ./bin/main
+
 migrate-create:
 	migrate create -ext sql -dir $(MIGRATIONS_DIR) -seq $(name)
 
