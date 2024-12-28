@@ -1,126 +1,124 @@
-# auth-session-manager
+# Auth Session Manager
 
-```sql
--- PostgreSQL Schema
+A robust session-based authentication system built with Go, featuring Redis for session management and PostgreSQL for persistent data storage.
 
--- Users table for storing user information
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    full_name VARCHAR(100),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP WITH TIME ZONE,
-    is_active BOOLEAN DEFAULT true,
-    failed_login_attempts INT DEFAULT 0,
-    last_failed_attempt TIMESTAMP WITH TIME ZONE
-);
+## Features
 
--- User sessions table for tracking active sessions
-CREATE TABLE user_sessions (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users(id) ON DELETE CASCADE,
-    session_token VARCHAR(255) UNIQUE NOT NULL,
-    device_info VARCHAR(255),
-    ip_address INET,
-    user_agent TEXT,
-    location VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_activity TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    is_active BOOLEAN DEFAULT true
-);
+- Secure user authentication with session management
+- Dual database system: PostgreSQL (persistent data) + Redis (session storage)
+- Session tracking with device info and location
+- Protection against brute force attacks
+- Active session management and monitoring
+- Automatic session expiration
+- Secure password handling with bcrypt
 
--- Create indexes for better query performance
-CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
-CREATE INDEX idx_user_sessions_token ON user_sessions(session_token);
-CREATE INDEX idx_users_email ON users(email);
+## Prerequisites
 
--- Common Queries
+- Go 1.x
+- PostgreSQL
+- Redis
+- GNU Make (for using Makefile commands)
 
--- 1. Create new user
-INSERT INTO users (email, username, password_hash, full_name)
-VALUES ($1, $2, $3, $4)
-RETURNING id;
+## Installation
 
--- 2. Get user by email (for login)
-SELECT \* FROM users WHERE email = $1;
+1. Clone the repository:
 
--- 3. Update failed login attempts
-UPDATE users
-SET failed_login_attempts = failed_login_attempts + 1,
-last_failed_attempt = CURRENT_TIMESTAMP
-WHERE email = $1;
-
--- 4. Reset failed login attempts after successful login
-UPDATE users
-SET failed_login_attempts = 0,
-last_failed_attempt = NULL,
-last_login = CURRENT_TIMESTAMP
-WHERE id = $1;
-
--- 5. Create new session
-INSERT INTO user_sessions
-(user_id, session_token, device_info, ip_address, user_agent, location, expires_at)
-VALUES
-($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP + INTERVAL '24 hours')
-RETURNING id;
-
--- 6. Get active sessions count for user (to check against MAX_DEVICES constant)
-SELECT COUNT(\*)
-FROM user_sessions
-WHERE user_id = $1
-AND is_active = true
-AND expires_at > CURRENT_TIMESTAMP;
-
--- 7. Get all active sessions for user (for displaying device list)
-SELECT us.\*, u.email
-FROM user_sessions us
-JOIN users u ON us.user_id = u.id
-WHERE us.user_id = $1
-AND us.is_active = true
-AND us.expires_at > CURRENT_TIMESTAMP
-ORDER BY us.last_activity DESC;
-
--- 8. Deactivate session (logout)
-UPDATE user_sessions
-SET is_active = false
-WHERE session_token = $1;
-
--- 9. Clean up expired sessions
-DELETE FROM user_sessions
-WHERE expires_at < CURRENT_TIMESTAMP;
-
--- 10. Check if session is valid
-SELECT us.\*, u.email, u.is_active as user_active
-FROM user_sessions us
-JOIN users u ON us.user_id = u.id
-WHERE us.session_token = $1
-AND us.is_active = true
-AND us.expires_at > CURRENT_TIMESTAMP;
-
--- Redis Schema (Key-Value Pairs)
-
--- Session Token Storage
--- Key: "session:{session_token}"
--- Value: JSON containing:
--- {
--- "user_id": "123",
--- "expires_at": "2024-12-28T00:00:00Z",
--- "ip_address": "192.168.1.1",
--- "device_info": "Chrome on MacOS"
--- }
--- TTL: 24 hours
-
--- Rate Limiting
--- Key: "login_attempts:{ip_address}"
--- Value: Number of attempts
--- TTL: 15 minutes
-
--- User Sessions Count
--- Key: "user_sessions:{user_id}"
--- Value: Set of active session tokens
--- TTL: None (cleaned up on logout)
+```bash
+git clone https://github.com/Krish-Depani/auth-session-manager.git
+cd auth-session-manager
 ```
+
+2. Install dependencies:
+
+```bash
+go mod download
+```
+
+3. Rename the `.env.example` file to `.env` and update the following environment variables as needed
+
+4. Set up the databases:
+   - Create PostgreSQL database
+   - Start Redis server
+   - Run migrations:
+
+```bash
+make migrate-up
+```
+
+## Running the Application
+
+### Development Mode
+
+```bash
+make start-dev
+```
+
+### Production Mode
+
+```bash
+make start-prod
+```
+
+## API Routes
+
+### Authentication Endpoints
+
+- `POST /auth/register` - Register a new user
+- `POST /auth/login` - User login
+- `POST /auth/logout` - User logout (requires authentication)
+
+### User Endpoints
+
+- `GET /auth/user/me` - Get current user details (requires authentication)
+- `GET /auth/user/sessions` - Get active sessions (requires authentication)
+
+## Security Features
+
+1. **Session Management**
+
+   - Session tokens stored in Redis with TTL
+   - Device and location tracking for each session
+   - Active session monitoring
+
+2. **Brute Force Protection**
+
+   - Maximum login attempt limits
+   - Cool-down period after failed attempts
+   - Automatic account protection
+
+3. **Secure Authentication**
+   - Bcrypt password hashing
+   - HTTP-only cookies for session tokens
+   - Transaction-based operations for data consistency
+
+## Database Management
+
+### Creating New Migrations
+
+```bash
+make migrate-create name=migration_name
+```
+
+### Migration Commands
+
+- Up: `make migrate-up`
+- Down: `make migrate-down n=1`
+- Status: `make migrate-status`
+- Force Version: `make migrate-force version=1`
+
+## Project Structure
+
+```
+├── bin/                  # Compiled binary
+├── config/              # Configuration files
+├── controllers/         # Request handlers
+├── database/           # Database connections and migrations
+├── models/             # Data models
+├── routes/             # API route definitions
+├── utils/              # Utility functions
+└── validators/         # Request validation
+```
+
+## If you like this project, please give it a 🌟.
+
+## Thank you 😊.
