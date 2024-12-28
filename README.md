@@ -2,6 +2,11 @@
 
 A robust session-based authentication system built with Go, featuring Redis for session management and PostgreSQL for persistent data storage.
 
+## Links
+
+- [Working API's](https://www.postman.com/envolve-7536/workspace/auth-session-manager/collection/16623333-cbd26cf3-eea0-480f-b7fd-e50ab825496f?action=share&creator=16623333)
+- [Docker Image](https://hub.docker.com/r/krishdepani/auth-session-manager/tags)
+
 ## Features
 
 - Secure user authentication with session management
