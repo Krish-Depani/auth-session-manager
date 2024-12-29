@@ -3,20 +3,15 @@ FROM golang:alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
 RUN apk add --no-cache gcc musl-dev make
 
-# Install migrate tool
 RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
-# Copy go mod files
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
 COPY . .
 
-# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
 # Final stage
@@ -24,7 +19,6 @@ FROM alpine:latest
 
 WORKDIR /app
 
-# Install PostgreSQL, Redis, and other necessary packages
 RUN apk add --no-cache \
     postgresql15 \
     postgresql15-contrib \
@@ -37,20 +31,17 @@ RUN apk add --no-cache \
     && mkdir -p /var/lib/postgresql/data \
     && chown -R postgres:postgres /var/lib/postgresql/data
 
-# Copy the binary and migrations from builder
 COPY --from=builder /app/main .
 COPY --from=builder /app/.env .
 COPY --from=builder /app/database/migrations ./database/migrations
 COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
 
-# Create a separate database initialization script
 COPY <<EOF /app/init-db.sql
 CREATE USER root WITH PASSWORD 'root' SUPERUSER;
 CREATE DATABASE asm;
 GRANT ALL PRIVILEGES ON DATABASE asm TO root;
 EOF
 
-# Copy initialization script
 COPY <<EOF /app/init.sh
 #!/bin/sh
 set -e

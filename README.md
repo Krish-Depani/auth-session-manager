@@ -17,6 +17,25 @@ A robust session-based authentication system built with Go, featuring Redis for 
 - Automatic session expiration
 - Secure password handling with bcrypt
 
+## Security Features
+
+1. **Session Management**
+
+   - Session tokens stored in Redis with TTL
+   - Device and location tracking for each session
+   - Active session monitoring
+
+2. **Brute Force Protection**
+
+   - Maximum login attempt limits
+   - Cool-down period after failed attempts
+   - Automatic account protection
+
+3. **Secure Authentication**
+   - Bcrypt password hashing
+   - HTTP-only cookies for session tokens
+   - Transaction-based operations for data consistency
+
 ## Prerequisites
 
 - Go 1.x
@@ -76,25 +95,6 @@ make start-prod
 
 - `GET /auth/user/me` - Get current user details (requires authentication)
 - `GET /auth/user/sessions` - Get active sessions (requires authentication)
-
-## Security Features
-
-1. **Session Management**
-
-   - Session tokens stored in Redis with TTL
-   - Device and location tracking for each session
-   - Active session monitoring
-
-2. **Brute Force Protection**
-
-   - Maximum login attempt limits
-   - Cool-down period after failed attempts
-   - Automatic account protection
-
-3. **Secure Authentication**
-   - Bcrypt password hashing
-   - HTTP-only cookies for session tokens
-   - Transaction-based operations for data consistency
 
 ## Database Management
 
