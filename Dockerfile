@@ -46,7 +46,6 @@ COPY <<EOF /app/init.sh
 #!/bin/sh
 set -e
 
-# Initialize PostgreSQL
 if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
     echo "Initializing PostgreSQL database..."
     su-exec postgres initdb -D /var/lib/postgresql/data
@@ -56,11 +55,9 @@ if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
     echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
 fi
 
-# Start PostgreSQL
 echo "Starting PostgreSQL..."
 su-exec postgres postgres -D /var/lib/postgresql/data &
 
-# Wait for PostgreSQL to start
 echo "Waiting for PostgreSQL to start..."
 until su-exec postgres pg_isready -h localhost -p 5432; do
     echo "PostgreSQL is unavailable - sleeping"
@@ -68,21 +65,17 @@ until su-exec postgres pg_isready -h localhost -p 5432; do
 done
 echo "PostgreSQL is ready!"
 
-# Initialize database and user
 echo "Setting up database and user..."
 su-exec postgres psql -f /app/init-db.sql
 
-# Run migrations
 echo "Running database migrations..."
 export DATABASE_URL="postgres://root:root@localhost:5432/asm?sslmode=disable"
 sleep 2  # Brief pause to ensure database is ready
 migrate -path ./database/migrations -database "\${DATABASE_URL}" up
 
-# Start Redis
 echo "Starting Redis..."
 redis-server --daemonize yes
 
-# Wait for Redis
 echo "Waiting for Redis to start..."
 until redis-cli ping > /dev/null 2>&1; do
     echo "Redis is unavailable - sleeping"
@@ -90,7 +83,6 @@ until redis-cli ping > /dev/null 2>&1; do
 done
 echo "Redis is ready!"
 
-# Start the main application
 echo "Starting main application..."
 export GIN_MODE=release
 ./main
